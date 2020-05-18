@@ -1,13 +1,12 @@
-using System;
+
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using AWSLambda1.Entity;
-using AWSLambda1.EntityHelper;
 using Alexa.NET.Request;
 using Alexa.NET.Response;
 using Amazon.Lambda.Core;
 using Alexa.NET.Request.Type;
+using AWSLambda1.DynamoDBHelper;
+using System;
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.Json.JsonSerializer))]
@@ -24,6 +23,7 @@ namespace AWSLambda1
                 base.Response = new ResponseBody();
             }
         }
+
         /// <summary>
         /// A simple function that takes a string and does a ToUpper
         /// </summary>
@@ -55,29 +55,52 @@ namespace AWSLambda1
 
         private new (string,SimpleCard) MakeResponse(IntentRequest ir, ILambdaContext context, string uid)
         {
-            CallValueHelper ch = new CallValueHelper();
-            var entity = ch.CallValueSelect(uid,context);
-            if (entity == null || entity.Players == null || entity.Players.Count < 4)
-            {
-                CallValueHelper cvh = new CallValueHelper();
-                entity = new CallValueEntity() { GameCount = 0, ID = uid, Players = new List<string>{"enpty",} };
-                cvh.CallValueInsert(entity, context);
-                return ("ÉÜÅ[ÉUÅ[Ç™å©Ç¬Ç©ÇËÇ‹ÇπÇÒÇ≈ÇµÇΩÅB\nìoò^ÇçsÇ¡ÇƒÇ≠ÇæÇ≥Ç¢ÅB", new SimpleCard() { Title = "ÉGÉâÅ[", Content = "ÉÜÅ[ÉUÅ[ñ¢ê›íË" });
-            }
+            //testdata(context, uid);
+            
             switch (ir.Intent.Name)
             {
                 case "NextIntent":
-                    entity.GameCount++;
-                    break;
-                case "BackIntent":
-                    entity.GameCount--;
-                    break;
+                    return Logic.callNextGame(context, uid);
+                //case "BackIntent":
+                //    break;
                 case "RepeatIntent":
-                    break;
+                    return Logic.callGameAgain(context, uid);
             }
-            ch.CallValueUpdate(entity, context);
-            return Logic.callGame(entity.Players,entity.GameCount);
+            throw new Exception();
         }
 
+
+        private void testdata(ILambdaContext context, string uid)
+        {
+            // TestÉfÅ[É^ê∂ê¨
+            List<Player> p = new List<Player>();
+            p.Add(new Player() { Id = 1, GameCount = 0, Rank = 0, Sex = true, Name = "ÇP", });
+            p.Add(new Player() { Id = 2, GameCount = 0, Rank = 0, Sex = true, Name = "ÇQ", });
+            p.Add(new Player() { Id = 3, GameCount = 0, Rank = 0, Sex = true, Name = "ÇR", });
+            p.Add(new Player() { Id = 4, GameCount = 0, Rank = 0, Sex = true, Name = "ÇS", });
+            p.Add(new Player() { Id = 5, GameCount = 0, Rank = 0, Sex = true, Name = "ÇT", });
+            p.Add(new Player() { Id = 6, GameCount = 0, Rank = 0, Sex = true, Name = "ÇU", });
+            p.Add(new Player() { Id = 7, GameCount = 0, Rank = 0, Sex = true, Name = "ÇV", });
+            p.Add(new Player() { Id = 8, GameCount = 0, Rank = 0, Sex = true, Name = "ÇW", });
+            p.Add(new Player() { Id = 9, GameCount = 0, Rank = 0, Sex = true, Name = "ÇX", });
+            p.Add(new Player() { Id = 10, GameCount = 0, Rank = 0, Sex = true, Name = "ÇPÇO", });
+            TeamSettingEntity ent1 = new TeamSettingEntity()
+            {
+                Key = uid,
+                SortKey = uid,
+                CoatNumber = 2,
+                players = p,
+            };
+            ent1.Save(context);
+
+            GameLogEntity ent2 = new GameLogEntity()
+            {
+                Key = uid,
+                SortKey = uid,
+                lastCallTime = new DateTime(1900, 1, 1),
+
+            };
+            ent2.Save(context);
+        }
     }
 }
