@@ -16,6 +16,7 @@ namespace AWSLambda1.Settings
         {
             var candidatePlayers = new List<Player>();                                                              // 選定対象プレイヤー
             var playersBuf = new List<Player>(teamSettingEntity.players);                                           // バッファ
+            playersBuf = playersBuf.Where(obj => obj.GameCount >= 0).ToList();
 
             // 試合候補者を試合数が少ない人から試合メンバー選定
             while (candidatePlayers.Count < teamSettingEntity.CoatNumber * 4)

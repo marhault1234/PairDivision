@@ -67,7 +67,7 @@ namespace AWSLambda1.Entity
                     foreach (Player player in value)
                     {
                         StringBuilder sb = new StringBuilder();
-                        sb.Append(player.Id).Append(SPLIT_STR)
+                        sb.Append(player.Id.ToString("00000")).Append(SPLIT_STR)
                             .Append(player.Name).Append(SPLIT_STR)
                             .Append(player.Sex ? MALE : FEMALE).Append(SPLIT_STR)
                             .Append(player.Rank).Append(SPLIT_STR)

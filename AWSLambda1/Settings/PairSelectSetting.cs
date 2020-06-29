@@ -21,33 +21,23 @@ namespace AWSLambda1.Settings
             // 次の試合のペア
             List<GameCombi> gamePairs = new List<GameCombi>();
 
-            // 組み合わせ試行回数：1000、1000回試行してもだめだったらランダムに組み合わせてログをリセットする。
-            int i = 0;
-            while (i++ <= 1000)
-            {
-                gamePairs = logic(gamePlayers, gameLogEntity.gameLogList);
+            gamePairs = logic(gamePlayers, gameLogEntity);
 
-                bool loopFlg = false;
-                // 決定した全ての組み合わせに過去と同一のものが無ければ決定
-                foreach (GameCombi gameComb in gamePairs)
-                {
-                    loopFlg = loopFlg || gameLogEntity.gameLogList.Where(obj =>obj.combStrValue.Equals(gameComb.combStrValue)).Any();
-                }
-                if (!loopFlg) break;
-            }
-            // 1000回試行してペアが決まらなかった場合ログをリセットして最初から
-            if (i >= 1000)
-            {
-                gameLogEntity.logClear();
-                gamePairs = logic(gamePlayers, gameLogEntity.gameLogList);
-            }
             // 組み合わせ結果を保存
             foreach (GameCombi comb in gamePairs) gameLogEntity.addLog(comb);
             gameLogEntity.Save(context);
 
             return gamePairs;
         }
-        protected abstract List<GameCombi> logic(List<Player> gamePlayers, List<GameCombi> logList);
+
+        /// <summary>
+        /// ゲーム参加者と過去ログから次の試合のペアを決定する。
+        /// 次の試合のペアが決まらない場合、ログをリセットし、最初から振り分けを行う。
+        /// </summary>
+        /// <param name="gamePlayers"></param>
+        /// <param name="gameLogEntity"></param>
+        /// <returns></returns>
+        protected abstract List<GameCombi> logic(List<Player> gamePlayers, GameLogEntity gameLogEntity);
     }
 
     /// <summary>
@@ -55,50 +45,96 @@ namespace AWSLambda1.Settings
     /// </summary>
     public class RandomPairSelect : AbstractPairSelectSetting
     {
-        protected override List<GameCombi> logic(List<Player> gamePlayers, List<GameCombi> logList)
+        protected override List<GameCombi> logic(List<Player> gamePlayers, GameLogEntity gameLogEntity)
         {
-            int member = gamePlayers.Count;
-            bool[] rndFlgs = new bool[member];
-            int[] ids = new int[member];
-            Random rnd = new System.Random();
-
-            for (int i = 0; i < member; i++)
+            List<GameCombi> createCombi(List<Player> players, List<GameCombi> logList)
             {
-                int r = rnd.Next(0, member);
-                while (rndFlgs[r]) r = rnd.Next(0, member);
-                rndFlgs[r] = true;
-                ids[r] = gamePlayers[i].Id;
-            }
+                int member = players.Count;
+                bool[] rndFlgs = new bool[member];
+                int[] ids = new int[member];
+                Random rnd = new System.Random();
 
-            // ペアの先頭はIDが小さい方にする
-            for (int i = 0; i < member; i += 2)
-            {
-                if (ids[i] > ids[i + 1])
+                for (int i = 0; i < member; i++)
                 {
-                    int buf = ids[i];
-                    ids[i] = ids[i + 1];
-                    ids[i + 1] = buf;
+                    int r = rnd.Next(0, member);
+                    while (rndFlgs[r]) r = rnd.Next(0, member);
+                    rndFlgs[r] = true;
+                    ids[r] = players[i].Id;
                 }
+
+                // ペアの先頭はIDが小さい方にする
+                for (int i = 0; i < member; i += 2)
+                {
+                    if (ids[i] > ids[i + 1])
+                    {
+                        int buf = ids[i];
+                        ids[i] = ids[i + 1];
+                        ids[i + 1] = buf;
+                    }
+                }
+
+                List<GameCombi> rtnList = new List<GameCombi>();
+                for (int i = 0; i < member; i += 4)
+                {
+                    rtnList.Add(new GameCombi()
+                    {
+                        comb1 = new GamePairCombi()
+                        {
+                            player1Id = ids[i],
+                            player2Id = ids[i + 1],
+                        },
+                        comb2 = new GamePairCombi()
+                        {
+                            player1Id = ids[i + 2],
+                            player2Id = ids[i + 3],
+                        },
+                    });
+                }
+                return rtnList;
             }
 
-            List<GameCombi> rtnList = new List<GameCombi>();
-            for (int i = 0; i < member; i += 4)
+            List<GameCombi> results = null;
+
+            // 直近1,2試合分のペアリスト
+            List<GameCombi> pairValueList = new List<GameCombi>();
+
+            // 直近の試合ログがある場合それを保持
+            int coatCount = gamePlayers.Count / 4;
+            if (gameLogEntity.gameLogList.Count >= coatCount * 2)
             {
-                rtnList.Add(new GameCombi()
-                {
-                    comb1 = new GamePairCombi()
-                    {
-                        player1Id = ids[i],
-                        player2Id = ids[i + 1],
-                    },
-                    comb2 = new GamePairCombi()
-                    {
-                        player1Id = ids[i + 2],
-                        player2Id = ids[i + 3],
-                    },
-                });
+                pairValueList.AddRange(gameLogEntity.gameLogList.GetRange(gameLogEntity.gameLogList.Count - coatCount * 2, coatCount * 2));
             }
-            return rtnList;
+            else if (gameLogEntity.gameLogList.Count >= coatCount)
+            {
+                pairValueList.AddRange(gameLogEntity.gameLogList.GetRange(gameLogEntity.gameLogList.Count - coatCount, coatCount));
+            }
+            List<string> pairIdList = new List<string>();
+            pairValueList.ForEach(obj => pairIdList.AddRange(obj.getPairList));
+
+            // 組み合わせ試行回数：1000、1000回試行してもだめだったらランダムに組み合わせてログをリセットする。
+            int count = 0;
+            while (count++ <= 1000)
+            {
+                results = createCombi(gamePlayers, gameLogEntity.gameLogList);
+
+                bool loopFlg = false;
+                // 決定した全ての組み合わせに過去と同一のものが無く、直近の試合と同じペアでなければ決定
+                foreach (GameCombi gameComb in results)
+                {
+                    loopFlg = loopFlg || 
+                        gameLogEntity.gameLogList.Where(obj => obj.combStrValue.Equals(gameComb.combStrValue)).Any() ||
+                        pairIdList.Contains(gameComb.comb1.pairIdValuer) ||
+                        pairIdList.Contains(gameComb.comb2.pairIdValuer);
+                }
+                if (!loopFlg) break;
+            }
+            // 1000回試行してペアが決まらなかった場合ログをリセットして最初から
+            if (count >= 1000)
+            {
+                gameLogEntity.logClear();
+                results = createCombi(gamePlayers, gameLogEntity.gameLogList);
+            }
+            return results;
         }
     }
 }

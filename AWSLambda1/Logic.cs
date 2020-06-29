@@ -16,6 +16,7 @@ namespace AWSLambda1
         private static readonly string CALL_COAT = "第{0}コート";
         private static readonly string CALL_PAIR = "[{0}] [{1}]";
         private static readonly string CALL_VIRSUS = " 対 ";
+        private static readonly string CARD_ROW = "{0} : [{1}]-[{2}]";
 
         public static (string, SimpleCard) callGameAgain(ILambdaContext context, string uid)
         {
@@ -57,7 +58,9 @@ namespace AWSLambda1
             // 試合ログが無い場合、各プレイヤーの試合数をリセット、ログリストを初期化
             if (logList.Count == 0)
             {
-                teamSettingEntity.players.ForEach(player => player.GameCount = 0);
+                var players = teamSettingEntity.players;
+                players.ForEach(player => player.GameCount = 0);
+                teamSettingEntity.players = players;
                 gameLogEntity.logClear();
             }
             // ゲームプレイヤー選択、設定で変更できるようにするならそれ用にする
@@ -70,13 +73,9 @@ namespace AWSLambda1
 
             // ゲームプレイヤーの試合数を増やす
             var gamePlayersId = gamePlayers.Select(obj => obj.Id);
-
-            foreach (var id in gamePlayersId)
-            {
-                teamSettingEntity.players.Where(obj => obj.Id == id).FirstOrDefault().GameCount++;
-            }
-
-            teamSettingEntity.players.ForEach(obj => { if (gamePlayersId.Contains(obj.Id)) obj.GameCount++; });
+            List<Player> playersCopy = teamSettingEntity.players;
+            playersCopy.ForEach(obj => { if (gamePlayersId.Contains(obj.Id)) obj.GameCount++; });
+            teamSettingEntity.players = playersCopy;
 
             teamSettingEntity.Save(context);
 
@@ -104,11 +103,9 @@ namespace AWSLambda1
                 callSb.Append(string.Format(CALL_PAIR, callPlayers[i * 4 + 2].Name, callPlayers[i * 4 + 3].Name));
                 callSb.Append("　。　");
 
-                cardSb.Append(string.Format(CALL_COAT, i + 1));
+                cardSb.Append(string.Format(CARD_ROW, i + 1, callPlayers[i * 4].Name, callPlayers[i * 4 + 1].Name));
                 cardSb.Append("\n");
-                cardSb.Append(string.Format(CALL_PAIR, callPlayers[i * 4].Name, callPlayers[i * 4 + 1].Name));
-                cardSb.Append("\n");
-                cardSb.Append(string.Format(CALL_PAIR, callPlayers[i * 4 + 2].Name, callPlayers[i * 4 + 3].Name));
+                cardSb.Append(string.Format(CARD_ROW, i + 1, callPlayers[i * 4 + 2].Name, callPlayers[i * 4 + 3].Name));
                 cardSb.Append("\n");
             }
 
