@@ -66,26 +66,6 @@ namespace AWSLambda1.Entity
                 return retList;
             }
         }
-        public class GamePairCombi
-        {
-            public int player1Id { get; set; }
-            public int player2Id { get; set; }
-            public string pairIdValuer { get { return player1Id.ToString("0000") + player2Id.ToString("0000"); } }
-        }
-        public class GameCombi
-        {
-            public GamePairCombi comb1 { get; set; }
-            public GamePairCombi comb2 { get; set; }
-            public string combStrValue 
-            { 
-                get
-                {
-                    return comb1.player1Id.ToString("0000") + comb1.player2Id.ToString("0000") + comb2.player1Id.ToString("0000") + comb2.player2Id.ToString("0000");
-                } 
-            }
-            public List<string> getPairList { get { return new List<string>() { comb1.pairIdValuer, comb2.pairIdValuer }; } }
-
-        }
 
         public void logClear()
         {

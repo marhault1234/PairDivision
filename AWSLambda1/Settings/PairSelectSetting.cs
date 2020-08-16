@@ -16,7 +16,7 @@ namespace AWSLambda1.Settings
         /// <param name="gamePlayers"></param>
         /// <param name="gameLogEntity"></param>
         /// <returns></returns>
-        public List<GameCombi> getPairList(ILambdaContext context, List<Player> gamePlayers, GameLogEntity gameLogEntity)
+        public List<GameCombi> getPairList( List<Player> gamePlayers, ref GameLogEntity gameLogEntity)
         {
             // 次の試合のペア
             List<GameCombi> gamePairs = new List<GameCombi>();
@@ -25,7 +25,6 @@ namespace AWSLambda1.Settings
 
             // 組み合わせ結果を保存
             foreach (GameCombi comb in gamePairs) gameLogEntity.addLog(comb);
-            gameLogEntity.Save(context);
 
             return gamePairs;
         }
@@ -60,17 +59,6 @@ namespace AWSLambda1.Settings
                     while (rndFlgs[r]) r = rnd.Next(0, member);
                     rndFlgs[r] = true;
                     ids[r] = players[i].Id;
-                }
-
-                // ペアの先頭はIDが小さい方にする
-                for (int i = 0; i < member; i += 2)
-                {
-                    if (ids[i] > ids[i + 1])
-                    {
-                        int buf = ids[i];
-                        ids[i] = ids[i + 1];
-                        ids[i + 1] = buf;
-                    }
                 }
 
                 List<GameCombi> rtnList = new List<GameCombi>();
@@ -122,9 +110,7 @@ namespace AWSLambda1.Settings
                 foreach (GameCombi gameComb in results)
                 {
                     loopFlg = loopFlg || 
-                        gameLogEntity.gameLogList.Where(obj => obj.combStrValue.Equals(gameComb.combStrValue)).Any() ||
-                        pairIdList.Contains(gameComb.comb1.pairIdValuer) ||
-                        pairIdList.Contains(gameComb.comb2.pairIdValuer);
+                        gameLogEntity.gameLogList.Where(obj => obj.combStrValue.Equals(gameComb.combStrValue)).Any();
                 }
                 if (!loopFlg) break;
             }

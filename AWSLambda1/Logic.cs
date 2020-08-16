@@ -1,5 +1,6 @@
 ﻿using Alexa.NET.Response;
 using Amazon.Lambda.Core;
+using AWSLambda1.Distribution;
 using AWSLambda1.DynamoDBHelper;
 using AWSLambda1.Entity;
 using AWSLambda1.Settings;
@@ -8,11 +9,52 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using static AWSLambda1.Entity.GameLogEntity;
+using static AWSLambda1.Logic;
 
 namespace AWSLambda1
 {
+    public static class EnumExt
+    {
+        /// <summary>
+        /// プレイヤーのピック条件
+        /// </summary>
+        /// <param name="selection"></param>
+        /// <returns></returns>
+        public static IPlayerSelect getPicker(this SelectionPatternEnum selection)
+        {
+            switch(selection)
+            {
+                case SelectionPatternEnum.EqualityRandomCall:
+                    return new DefaultPick();
+                default:return null;
+            }
+        }
+        /// <summary>
+        /// プレイヤーの組み合わせ条件
+        /// </summary>
+        /// <param name="selection"></param>
+        /// <returns></returns>
+        public static AbstractPairSelectSetting getSelecter(this SelectionPatternEnum selection)
+        {
+            switch (selection)
+            {
+                case SelectionPatternEnum.EqualityRandomCall:
+                    return new RandomPairSelect();
+                default: return null;
+            }
+        }
+    }
     public static class Logic
     {
+        public enum SelectionPatternEnum
+        {
+            /// <summary>
+            /// 試合数が均一になるように人選し、
+            /// ランダムな組み合わせでコールする
+            /// </summary>
+            EqualityRandomCall,
+        }
+
         private static readonly string CALL_COAT = "第{0}コート";
         private static readonly string CALL_PAIR = "[{0}] [{1}]";
         private static readonly string CALL_VIRSUS = " 対 ";
@@ -63,13 +105,19 @@ namespace AWSLambda1
                 teamSettingEntity.players = players;
                 gameLogEntity.logClear();
             }
+
+            // チーム設定からペア決めのロジックを設定【予定】
+            SelectionPatternEnum selectionPattern = SelectionPatternEnum.EqualityRandomCall;
+
             // ゲームプレイヤー選択、設定で変更できるようにするならそれ用にする
-            IPlayerSelect playerSelect = new PlayerSelectDefault();
+            IPlayerSelect playerSelect = selectionPattern.getPicker();
             List<Player> gamePlayers = playerSelect.playerSelect(teamSettingEntity);
 
             // ペア決め
-            AbstractPairSelectSetting pairSelect = new RandomPairSelect();
-            List<GameCombi> nextCombi = pairSelect.getPairList(context, gamePlayers, gameLogEntity);
+            AbstractPairSelectSetting pairSelect = selectionPattern.getSelecter();
+            List<GameCombi> nextCombi = pairSelect.getPairList(gamePlayers, ref gameLogEntity);
+
+            gameLogEntity.Save(context);
 
             // ゲームプレイヤーの試合数を増やす
             var gamePlayersId = gamePlayers.Select(obj => obj.Id);
