@@ -59,6 +59,8 @@ namespace AWSLambda1
             {
                 case "NextIntent":
                     return new Logic().callNextGame(context, uid);
+                case "RepeatIntent":
+                    return new Logic().callRepeat(context, uid);
                 case "dummy":
                     return ("dummy", new SimpleCard() { Title = "dummy", Content = "dummy"});
                     //case "BackIntent":

@@ -19,24 +19,24 @@ namespace AWSLambda1
         public enum SelectionPatternEnum
         {
             /// <summary>
-            /// 前試合に参加していない人を優先に選択し、
+            /// 試合割合が少ない人を優先に選択し、
             /// ランダムな組み合わせでコールする
             /// </summary>
             RandomCall,
             /// <summary>
-            /// 前試合に参加していない人を優先に選択し、
+            /// 試合割合が少ない人を優先に選択し、
             /// 出来るだけミックス・男女別にコールする。
             /// </summary>
             DefaultCall,
         }
 
-        #region 次の試合をコール
+        #region NextIntent 次の試合をコール
         public (string, SimpleCard) callNextGame(ILambdaContext context, string uid)
         {
             Random rnd = new Random(DateTime.Now.Hour * 3600 + DateTime.Now.Minute * 60 + DateTime.Now.Second);
 
             // ***** データ読み込み *****
-            this.dataLoad(out Practices practice, out List<Results> resultList, out List<Users> userList);
+            this.loadPracticeData(out Practices practice, out List<Results> resultList, out List<Users> userList);
 
             // 全ゲームに参加したユーザー情報（回数カウント用）
             List<int> gamePlayerLog = new List<int>();
@@ -71,8 +71,25 @@ namespace AWSLambda1
         }
         #endregion
 
+        public (string, SimpleCard) callRepeat(ILambdaContext context, string uid)
+        {
+            // ***** データ読み込み *****
+            this.loadPracticeData(out Practices practice, out List<Results> resultList, out List<Users> userList);
+            this.loadAllUser(out List<Users> loadAllUser);
+
+            var repeatResult = resultList.Where(result => result.match_id == resultList.Max(obj => obj.match_id)).OrderBy(obj => obj.id).ToList();
+            
+            return createAlexaResponse(repeatResult, loadAllUser);
+        }
+
         #region DBデータ取得処理
-        public void dataLoad(out Practices practice, out List<Results> resultList, out List<Users> userList)
+        /// <summary>
+        /// 練習データ取得。練習情報、履歴情報、参加者情報
+        /// </summary>
+        /// <param name="practice"></param>
+        /// <param name="resultList"></param>
+        /// <param name="userList"></param>
+        public void loadPracticeData(out Practices practice, out List<Results> resultList, out List<Users> userList)
         {
             practice = new Practices();                                     // 練習データ
             resultList = new List<Results>();                               // 試合履歴
@@ -119,10 +136,25 @@ namespace AWSLambda1
                 userList = usersAccess.load();
             }
         }
-        #endregion
+        public void loadAllUser(out List<Users> allUsersList)
+        {
+            using (MySqlConnection connection = new MySqlConnection(Static.BUILDER.ConnectionString))
+            {
+                connection.Open();
+                // 練習参加者ロードSQL
+                StringBuilder usersSqlBuilder = new StringBuilder();
+                usersSqlBuilder.Append("SELECT * ");
+                usersSqlBuilder.Append("FROM rmaster.users ");
+                string usersSql = usersSqlBuilder.ToString();
 
-        #region データ保存処理
-        public void saveData(List<Results> results, List<Users> gamePlayers, Practices practice)
+                DataLoad<Users> usersAccess = new DataLoad<Users>(connection, usersSql);
+                allUsersList = usersAccess.load();
+            }
+        }
+            #endregion
+
+            #region データ保存処理
+            public void saveData(List<Results> results, List<Users> gamePlayers, Practices practice)
         {
             // データ更新用現在時刻
             DateTime now = DateTime.Now;
@@ -255,7 +287,7 @@ namespace AWSLambda1
 
         #endregion
 
-
+        #region Alexa用レスポンス作成
         private static readonly string CALL_COAT = "第{0}コート";
         private static readonly string CALL_PAIR = "[{0}] [{1}]";
         private static readonly string CALL_VIRSUS = " 対 ";
@@ -287,6 +319,7 @@ namespace AWSLambda1
 
             return (callSb.ToString(), card);
         }
+        #endregion
     }
 }
 
