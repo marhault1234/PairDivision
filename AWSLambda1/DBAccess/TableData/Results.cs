@@ -14,6 +14,13 @@ namespace AWSLambda1.DBAccess
         public int user1 { get; set; }
         public int user2 { get; set; }
         public int point { get; set; }
+
+        [NoDbColumn]
+        public string pairCheckStr { get {
+                if (user1 < user2) return user1 + "-" + user2;
+                else return user2 + "-" + user1;
+            } 
+        }
     }
     public class Matches : TableData
     {

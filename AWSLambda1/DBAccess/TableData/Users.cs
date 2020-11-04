@@ -21,6 +21,12 @@ namespace AWSLambda1.DBAccess
         /// </summary>
         [NoDbColumn]
         public int randomInt { get; set; }
+
+        /// <summary>
+        /// 連続試合数
+        /// </summary>
+        [NoDbColumn]
+        public int ContinuousCount { get; set; }
     }
     public class Play_counts : TableData
     {

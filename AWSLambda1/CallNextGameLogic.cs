@@ -9,12 +9,13 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Text;
-using static AWSLambda1.Logic;
+using static AWSLambda1.CallNextGameLogic;
+using static AWSLambda1.Function;
 
 namespace AWSLambda1
 {
 
-    public class Logic
+    public class CallNextGameLogic
     {
         public enum SelectionPatternEnum
         {
@@ -28,10 +29,16 @@ namespace AWSLambda1
             /// 出来るだけミックス・男女別にコールする。
             /// </summary>
             DefaultCall,
+            /// <summary>
+            /// 男女が同数になるように、
+            /// それぞれ試合割合が少ない人を優先に選択しコールする。
+            /// コート数に対していずれかの性別が足りない場合は適当に設定する。
+            /// </summary>
+            MixCall,
         }
 
-        #region NextIntent 次の試合をコール
-        public (string, SimpleCard) callNextGame(ILambdaContext context, string uid)
+        #region 次の試合をコール
+        public SkillResponse2 callNextGame(ILambdaContext context, string uid, SelectionPatternEnum pattern)
         {
             Random rnd = new Random(DateTime.Now.Hour * 3600 + DateTime.Now.Minute * 60 + DateTime.Now.Second);
 
@@ -40,47 +47,89 @@ namespace AWSLambda1
 
             // 全ゲームに参加したユーザー情報（回数カウント用）
             List<int> gamePlayerLog = new List<int>();
-            resultList.ForEach(r => {
-                gamePlayerLog.Add(r.user1);
-                gamePlayerLog.Add(r.user2); 
-            });
-
-            // 各ユーザーにランダム値と試合率設定
+            List<int> lastGameUser = new List<int>();
+            List<Results> lastGames = new List<Results>();
+            if (resultList.Any())
+            {
+                int maxMatchId = resultList.Select(r => r.match_id).Max();
+                foreach (var r in resultList.OrderByDescending(r => r.match_id))
+                {
+                    gamePlayerLog.Add(r.user1);
+                    gamePlayerLog.Add(r.user2);
+                    if (r.match_id == maxMatchId)
+                    {
+                        lastGameUser.Add(r.user1);
+                        lastGameUser.Add(r.user2);
+                        lastGames.Add(r);
+                    }
+                };
+            }
+            // 各ユーザーにランダム値と試合率、直前の試合有無を設定
             userList.ForEach(user => { 
                 user.randomInt = rnd.Next(9999999); 
-                user.playPercentage = gamePlayerLog.Count(obj => obj == user.id) / (user.count ?? 1); 
+                user.playPercentage = (user.count ?? 0) == 0 ? 1 : gamePlayerLog.Count(obj => obj == user.id) / (decimal)user.count ;
+                user.ContinuousCount = lastGameUser.Count(obj => obj == user.id);
             });
 
             // コート数取得。最大３コート
-            int coatCount = userList.Count / 4;
-            coatCount = coatCount > 3 ? 3 : coatCount;
-
-            // ペア決めのロジックを設定【ToDo 変更を容易に出来るように】
-            SelectionPatternEnum selectionPattern = SelectionPatternEnum.DefaultCall;
+            int coatCount = getCoat(userList);
 
             // 次ゲームの参加者決め
-            List<Users> gamePlayers = selectionPattern.getPicker().playerSelect(userList, resultList, coatCount);
+            List<Users> gamePlayers = pattern.getPicker().playerSelect(userList, resultList, coatCount);
 
-            // ペア決め
-            List<Results> addMatchesAndResults = selectionPattern.getSelecter().getPairList(gamePlayers, resultList, coatCount);
+            List<Results> addMatchesAndResults;
+            bool decision;
+            do
+            {
+                decision = false;
+                // 各ユーザーのランダム値更新
+                gamePlayers.ForEach(user => { user.randomInt = rnd.Next(9999999); });
+                // ペア決め
+                addMatchesAndResults = pattern.getSelecter().getPairList(gamePlayers, resultList, coatCount);
+                addMatchesAndResults.ForEach(r => decision = decision || lastGames.Select(l => l.pairCheckStr).Contains(r.pairCheckStr));
+            } while (decision);
 
             // DB更新
-            this.saveData(addMatchesAndResults, gamePlayers, practice);
+            this.saveData(addMatchesAndResults, gamePlayers, practice, userList);
 
-            return createAlexaResponse(addMatchesAndResults, gamePlayers);
+            (string msg,SimpleCard card) msgCard  = createAlexaResponse(addMatchesAndResults, gamePlayers);
+            SkillResponse2 skillResponse = new SkillResponse2();
+            skillResponse.Response.OutputSpeech = new PlainTextOutputSpeech() { Text = msgCard.msg };
+            skillResponse.Response.Card = msgCard.card;
+            skillResponse.Response.ShouldEndSession = true;
+
+            return skillResponse;
         }
         #endregion
 
-        public (string, SimpleCard) callRepeat(ILambdaContext context, string uid)
+        private int getCoat(List<Users> users)
+        {
+            int coatCount = users.Count / 4;
+            coatCount = coatCount > Static.MAX_COAT ? Static.MAX_COAT : coatCount;
+            return coatCount;
+        }
+
+
+        #region RepeatIntent 過去の最新の試合を再コール
+        public SkillResponse2 callRepeat(ILambdaContext context, string uid)
         {
             // ***** データ読み込み *****
             this.loadPracticeData(out Practices practice, out List<Results> resultList, out List<Users> userList);
             this.loadAllUser(out List<Users> loadAllUser);
 
             var repeatResult = resultList.Where(result => result.match_id == resultList.Max(obj => obj.match_id)).OrderBy(obj => obj.id).ToList();
-            
-            return createAlexaResponse(repeatResult, loadAllUser);
+
+            (string msg, SimpleCard card) msgCard = createAlexaResponse(repeatResult, loadAllUser);
+            SkillResponse2 skillResponse = new SkillResponse2();
+            skillResponse.Response.OutputSpeech = new PlainTextOutputSpeech() { Text = msgCard.msg };
+            skillResponse.Response.Card = msgCard.card;
+            skillResponse.Response.ShouldEndSession = true;
+
+            return skillResponse;
+
         }
+        #endregion
+
 
         #region DBデータ取得処理
         /// <summary>
@@ -153,8 +202,8 @@ namespace AWSLambda1
         }
             #endregion
 
-            #region データ保存処理
-            public void saveData(List<Results> results, List<Users> gamePlayers, Practices practice)
+        #region データ保存処理
+            public void saveData(List<Results> results, List<Users> gamePlayers, Practices practice, List<Users> allUsers)
         {
             // データ更新用現在時刻
             DateTime now = DateTime.Now;
@@ -180,19 +229,21 @@ namespace AWSLambda1
                     resultInsertCommand.Transaction = transaction;
                     resultInsertCommand.ExecuteNonQuery();
 
-                    MySqlCommand play_countsUpdateCommand = this.play_countsUpdateCommand(now, practice);
+                    // カウントは全ユーザーでプラス
+                    MySqlCommand play_countsUpdateCommand = this.play_countsUpdateCommand(now, practice, allUsers);
                     play_countsUpdateCommand.Connection = connection;
                     resultInsertCommand.Transaction = transaction;
                     play_countsUpdateCommand.ExecuteNonQuery();
 
                     // Insertが不要の場合がある
-                    MySqlCommand play_countsInsertCommand = this.play_countsInsertCommand(now, practice, gamePlayers);
+                    MySqlCommand play_countsInsertCommand = this.play_countsInsertCommand(now, practice, allUsers);
                     if (play_countsInsertCommand != null)
                     {
                         play_countsInsertCommand.Connection = connection;
                         resultInsertCommand.Transaction = transaction;
                         play_countsInsertCommand.ExecuteNonQuery();
                     }
+
                     transaction.Commit();
                 }
                 catch (Exception e)
@@ -249,22 +300,25 @@ namespace AWSLambda1
             return resultInsertCommand;
         }
 
-        private MySqlCommand play_countsUpdateCommand(DateTime nowTime, Practices practice)
+        private MySqlCommand play_countsUpdateCommand(DateTime nowTime, Practices practice, List<Users> allUsers)
         {
             // play_counts更新用SQL
             StringBuilder play_countsUpdateBuilder = new StringBuilder();
             play_countsUpdateBuilder.Append("UPDATE rmaster.play_counts ");
             play_countsUpdateBuilder.Append("SET count = count + 1, updated_at = @updated_at ");
-            play_countsUpdateBuilder.Append("where practice_id = @practiceId ");
+            play_countsUpdateBuilder.Append("WHERE practice_id = @practiceId ");
+            play_countsUpdateBuilder.Append("AND user_id in ( ");
+            play_countsUpdateBuilder.Append(string.Join(",", allUsers.Select(u => u.id).ToArray()));
+            play_countsUpdateBuilder.Append(") ");
             MySqlCommand play_countsUpdateCommand = new MySqlCommand(play_countsUpdateBuilder.ToString());
             play_countsUpdateCommand.Parameters.Add(new MySqlParameter("practiceId", practice.id));
             play_countsUpdateCommand.Parameters.Add(new MySqlParameter("updated_at", nowTime));
             return play_countsUpdateCommand;
         }
-        private MySqlCommand play_countsInsertCommand(DateTime nowTime, Practices practice, List<Users> gamePlayers)
+        private MySqlCommand play_countsInsertCommand(DateTime nowTime, Practices practice, List<Users> allUsers)
         {
             // play_counts挿入用SQL
-            List<Users> playCountsInsertUsers = gamePlayers.Where(user => user.count == null).ToList();
+            List<Users> playCountsInsertUsers = allUsers.Where(user => user.count == null).ToList();
             int play_countsInsertCount = playCountsInsertUsers.Count();
             if (play_countsInsertCount == 0) return null;
             List<MySqlParameter> play_countsSqlParameter = new List<MySqlParameter>();

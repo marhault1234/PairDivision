@@ -18,7 +18,19 @@ namespace AWSLambda1.PlayerSelect
         /// <returns></returns>
         public List<Users> playerSelect(List<Users> users, List<Results> matches, int coatNumber)
         {
-            return users.OrderBy(user => user.playPercentage).ThenBy(user => user.randomInt).Take(coatNumber * 4).ToList();
+            // 参加者が4で割り切れる数の場合メンバーが固定されるため、１人ずつ交代するように対応
+            List<Users> result = new List<Users>();
+            if (users.Count > coatNumber * 4 && users.Count % 4 == 0)
+            {
+                result = users.OrderBy(user => user.playPercentage).ThenBy(user => user.ContinuousCount).ThenBy(user => user.randomInt).Take(coatNumber * 4 + 1).ToList();
+                result.RemoveAt(3);
+            }
+            else
+            {
+                result = users.OrderBy(user => user.playPercentage).ThenBy(user => user.ContinuousCount).ThenBy(user => user.randomInt).Take(coatNumber * 4).ToList();
+            }
+
+            return result;
         }
     }
 }

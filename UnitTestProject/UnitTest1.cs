@@ -9,9 +9,10 @@ namespace UnitTestProject
         [TestMethod]
         public void dbAccessTest()
         {
-            Logic logic = new Logic();
-            logic.callNextGame(null, null);
+            CallNextGameLogic logic = new CallNextGameLogic();
+            logic.callNextGame(null, null, CallNextGameLogic.SelectionPatternEnum.MixCall);
 
         }
+
     }
 }

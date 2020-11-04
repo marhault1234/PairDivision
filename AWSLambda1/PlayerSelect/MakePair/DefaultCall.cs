@@ -27,7 +27,7 @@ namespace AWSLambda1.PlayerSelect
             if (randomInt == 0)
             {
                 // 男女別
-                sortList = users.OrderBy(user => user.gender).ThenBy(user => user.randomInt).ToList();
+                sortList = users.OrderBy(user => user.gender).ThenBy(user => user.ContinuousCount).ThenBy(user => user.randomInt).ToList();
             }
             else
             {
@@ -35,7 +35,7 @@ namespace AWSLambda1.PlayerSelect
                 int userCount = users.Count;
                 int pairCount = userCount / 2;
                 // 男女別にソートして先頭と末尾から一人ずつ先頭になるよう並び替える
-                var temp = users.OrderBy(user => user.gender).ThenBy(user => user.randomInt).ToArray();
+                var temp = users.OrderBy(user => user.gender).ThenBy(user => user.ContinuousCount).ThenBy(user => user.randomInt).ToArray();
                 for(int i = 0; i < pairCount; i++)
                 {
                     sortList.Add(temp[i]);
