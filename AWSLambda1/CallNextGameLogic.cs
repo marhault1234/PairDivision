@@ -96,7 +96,7 @@ namespace AWSLambda1
             SkillResponse2 skillResponse = new SkillResponse2();
             skillResponse.Response.OutputSpeech = new PlainTextOutputSpeech() { Text = msgCard.msg };
             skillResponse.Response.Card = msgCard.card;
-            skillResponse.Response.ShouldEndSession = true;
+            skillResponse.Response.ShouldEndSession = null;
 
             return skillResponse;
         }
@@ -123,7 +123,8 @@ namespace AWSLambda1
             SkillResponse2 skillResponse = new SkillResponse2();
             skillResponse.Response.OutputSpeech = new PlainTextOutputSpeech() { Text = msgCard.msg };
             skillResponse.Response.Card = msgCard.card;
-            skillResponse.Response.ShouldEndSession = true;
+            skillResponse.Response.ShouldEndSession = null;
+            
 
             return skillResponse;
 
